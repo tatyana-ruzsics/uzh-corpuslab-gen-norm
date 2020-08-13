@@ -3,14 +3,16 @@
 """ This file evaluates results with details over seen/unseen segments(morphemes/words)
 
 Usage:
-  accuracy-det.py eval [--input_format=INPUT_FORMAT] [--lowercase=LOW] [--extended_train_data=EXT_FILE] [--conll_format]
+  accuracy-det.py eval [--input_format=INPUT_FORMAT] [--lowercase=LOW] [--extended_train_data=EXT_FILE] [--conll_format] [--pos_statistics]
   TRAIN_DATA TEST_DATA PREDICTIONS RESULTS_FILE RESULTS_ERRORS_FILE
   accuracy-det.py eval_baseline [--input_format=INPUT_FORMAT] [--lowercase=LOW] [--error_file=ERR_FILE] [--conll_format]
   TRAIN_DATA TEST_DATA
-  accuracy-det.py eval_ambiguity [--input_format=INPUT_FORMAT] [--lowercase=LOW] [--conll_format]
+  accuracy-det.py eval_ambiguity [--input_format=INPUT_FORMAT] [--lowercase=LOW] [--conll_format] [--pos_statistics]
   TRAIN_DATA TEST_DATA PREDICTIONS RESULTS_FILE RESULTS_ERRORS_FILE
   accuracy-det.py eval_ambiguity_baseline [--input_format=INPUT_FORMAT] [--lowercase=LOW] [--error_file=ERR_FILE] [--conll_format]
   TRAIN_DATA TEST_DATA
+  accuracy-det.py print_ambiguity [--input_format=INPUT_FORMAT] [--lowercase=LOW] [--conll_format]
+  TRAIN_DATA RESULTS_FILE
   
 
 Arguments:
@@ -27,6 +29,7 @@ Options:
   --extended_train_data=EXT_FILE    extended data used for LM training, one-column format
   --error_file=ERR_FILE             file to write the errors of baseline evaluation
   --conll_format                    use conll format
+  --pos_statistics                  print statistics for POS prediction
 """
 
 from __future__ import division
@@ -239,7 +242,75 @@ def evaluate_baseline(trainin,gold,input_format,lowercase=False, file_out_errors
                 f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, len(errors[(w,pred,true_pred)]), w_amb, w_new, w_unique, ", ".join(errors[(w,pred,true_pred)])))
 
 
-def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors =None, predict=None,file_out=None, conll_format=False):
+def print_ambiguity(trainin,input_format,lowercase=False,file_out=None, conll_format=False):
+    train_lexicon_m = defaultdict(int)
+    train_lexicon_w = defaultdict(int)
+    train_dict = {} # train_word: dict(pos:dict(predict:freq))
+    train_seg_dict = {} # train_word: dict(predict:freq)
+    
+    input = input_format[0]
+    pred = input_format[1]
+    pos_col = input_format[2]
+    
+    # Read lexicon of training set
+    trainin_f = codecs.open(trainin,'r','utf-8')
+    for i,line in enumerate(trainin_f):
+        #if i < 40:
+        #        print line
+        if len(line.strip()) != 0:
+            line = line.strip().lower() if lowercase else line.strip()
+            lineitems = line.split('\t')
+            if (not conll_format) or (conll_format and not line.startswith('#') and not(lineitems[pos_col].lower()=='punct' or any(c in '@+._/1234567890' for c in lineitems[pred]+lineitems[input])) ):
+                try:
+                    word = lineitems[input]
+                    segm = lineitems[pred]
+                    pos = lineitems[pos_col]
+
+                    
+                    if not word in train_seg_dict.keys():
+                        train_seg_dict[word] = {}
+                        train_seg_dict[word][segm]=1
+                    else:
+                        if segm not in train_seg_dict[word].keys():
+                            train_seg_dict[word][segm]=1
+                        else:
+                            train_seg_dict[word][segm]+=1
+            
+                    if not word in train_dict.keys():
+                        train_dict[word] = {}
+                        train_dict[word][pos]={}
+                        train_dict[word][pos][segm] = [i]
+                    else:
+                        if pos not in train_dict[word].keys():
+                            train_dict[word][pos]={}
+                            train_dict[word][pos][segm]=[i]
+                        else:
+                            if segm not in train_dict[word][pos].keys():
+                                train_dict[word][pos][segm]=[i]
+                            else:
+                                train_dict[word][pos][segm].append(i)
+                except:
+                    print 'bad line:'
+                    print line, lineitems, input
+
+    f_out = codecs.open(file_out,'w','utf-8')
+    amb_segm_train = {k:train_dict[k] for k,v in train_dict.items() if len(train_seg_dict[k])>1}
+    for w,w_v in amb_segm_train.items():
+        u = [pos for pos,pos_v in w_v.items() if len(pos_v)>1]
+        if len(u)==0:
+            # POS-unambigous
+            pos_out = u'; '.join([u'{} : {} : {} : {}'.format(pos,len(lines),v,lines) for pos,pos_v in w_v.items() for v,lines in pos_v.items()])
+            line = u'{}\t{}\t{}\n'.format(w, 'POS-unamb', pos_out)
+            f_out.write(line)
+        else:
+            # POS-amb
+            pos_out = u'; '.join([u'{} : {} : {} : {}'.format(pos,len(lines),v,lines) for pos,pos_v in w_v.items() for v,lines in pos_v.items()])
+            line = u'{}\t{}\t{}\n'.format(w, 'POS-amb', pos_out)
+            f_out.write(line)
+
+
+
+def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors =None, predict=None,file_out=None, conll_format=False, pos_statistics=False):
     train_lexicon_m = defaultdict(int)
     test_lexicon_m = defaultdict(int)
     train_lexicon_w = defaultdict(int)
@@ -247,7 +318,7 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
     train_dict = {} # train_word: dict(pos:dict(predict:freq))
     train_seg_dict = {} # train_word: dict(predict:freq)
     test_dict = {} # test_word: dict(pos:dict(predict:freq))
-    test_seg_dict = {} # test_word: dict(predict:freq)
+    test_seg_dict = {} # test_word: dict(predict:freq)#
     
     input = input_format[0]
     pred = input_format[1]
@@ -297,7 +368,7 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
                     print line
                     print lineitems
                     print input
-
+    
 
     # Read lexicon of test set
     gold_f = codecs.open(gold,'r','utf-8')
@@ -342,9 +413,13 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
         # Collect predictions
         predict_f = codecs.open(predict,'r','utf-8')
         pred_dict_ext = {}
+        pred_dict_pos = {}
         for j, line in enumerate(predict_f):
             line = line.strip().lower() if lowercase else line.strip()
-            if len(line.split('\t'))>1:
+            if len(line.split('\t'))>2:
+                w, w_segm, pos = line.split('\t')
+                pred_dict_pos[(w,j+1)] = pos
+            elif len(line.split('\t'))>1:
                 w, w_segm = line.split('\t')
             else:
                 w = line.split('\t')[0]
@@ -395,7 +470,7 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
     
     for w, w_v in pos_disamb_test_candidates.items():
         train_pos = w_v.keys()
-        u = [pos for pos,pos_v in w_v.items() if len(pos_v)>1]
+        u = [pos for pos,pos_v in w_v.items() if len(pos_v)>1] 
 
         for pos,pos_v in test_dict[w].items():
             freq = sum(test_dict[w][pos].values())
@@ -482,6 +557,14 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
     corr_pos_nodisamb_new_b = 0 # number of correct ambigous which cannot be disambiguated with pos - new
     corr_pos_nodisamb_tie_b = 0 # number of correct ambigous which cannot be disambiguated with pos - tie
     corr_pos_nodisamb_notie_b = 0 # number of correct ambigous which cannot be disambiguated with pos - noties
+
+    if pos_statistics:
+        corr_pos_w = 0
+        corr_pos_seen_w = 0
+        corr_pos_unseen_w = 0
+        corr_pos_amb_w = 0
+        corr_pos_disamb_w = 0
+        corr_pos_nodisamb_w = 0
 
     gold_f.seek(0)
     for i,line in enumerate(gold_f):
@@ -590,11 +673,31 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
                                         corr_pos_nodisamb_notie +=1
 
                     else:
-            
-                        if (w,pred_dict_ext[(w,allc)], w_segm, pos) not in errors.keys():
-                            errors[(w,pred_dict_ext[(w,allc)], w_segm, pos)] = [lines]
+                        if not pos_statistics:
+                            if (w,pred_dict_ext[(w,allc)], w_segm, pos) not in errors.keys():
+                                errors[(w,pred_dict_ext[(w,allc)], w_segm, pos)] = [lines]
+                            else:
+                                errors[(w,pred_dict_ext[(w,allc)], w_segm, pos)].append(lines)
                         else:
-                            errors[(w,pred_dict_ext[(w,allc)], w_segm, pos)].append(lines)
+                            if (w,pred_dict_ext[(w,allc)], w_segm, pred_dict_pos[(w,allc)], pos) not in errors.keys():
+                                errors[(w,pred_dict_ext[(w,allc)], w_segm, pred_dict_pos[(w,allc)], pos)] = [lines]
+                            else:
+                                errors[(w,pred_dict_ext[(w,allc)], w_segm, pred_dict_pos[(w,allc)], pos)].append(lines)
+
+                    if pos_statistics:
+                        if pred_dict_pos[(w,allc)] == pos:
+                            corr_pos_w += 1
+                            if w in amb_segm_test.keys():
+                                corr_pos_amb_w += 1
+                                if (w,pos) in pos_disamb_test.keys():
+                                    corr_pos_disamb_w +=1
+                                else:
+                                    corr_pos_nodisamb_w +=1
+                            else:
+                                if w not in train_lexicon_w.keys():
+                                    corr_pos_unseen_w += 1
+                                else:
+                                    corr_pos_seen_w += 1
 
     if predict:
         with codecs.open(file_out,'w','utf-8') as f:
@@ -612,23 +715,47 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
             f.write("{:>60} {:11d} {:8.2f}%\n".format("- ambigous:", corr_amb, corr_amb/amb*100))
             f.write("{:>60} {:11d} {:8.2f}%\n".format("- ambigous with POS disambig:", corr_pos_disamb, corr_pos_disamb/pos_disamb*100))
             f.write("{:>60} {:11d} {:8.2f}%\n".format("- ambigous with no POS disambig:", corr_pos_nodisamb, corr_pos_nodisamb/pos_nodisamb*100))
-            f.write("{:>60} {:11d} {:8.2f}%\n".format("- ambigous with no POS disambig - new POS:", corr_pos_nodisamb_new, corr_pos_nodisamb_new/pos_nodisamb_new*100))
+            if pos_nodisamb_new!=0:
+                f.write("{:>60} {:11d} {:8.2f}%\n".format("- ambigous with no POS disambig - new POS:", corr_pos_nodisamb_new, corr_pos_nodisamb_new/pos_nodisamb_new*100))
             if pos_nodisamb_tie!=0:
                 f.write("{:>60} {:11d} {:8.2f}%\n".format("- ambigous with no POS disambig - ties:", corr_pos_nodisamb_tie, corr_pos_nodisamb_tie/pos_nodisamb_tie*100))
             f.write("{:>60} {:11d} {:8.2f}%\n".format("- ambigous with no POS disambig - no ties:", corr_pos_nodisamb_notie, corr_pos_nodisamb_notie/pos_nodisamb_notie*100))
-            
+            if pos_statistics:
+                f.write("{:>60} {:11d} {:8.2f}%\n".format("Number of correct POS predictions total:", corr, corr_pos_w/allc*100))
+                if amb !=0:
+                    f.write("{:>60} {:11d} {:8.2f}%\n".format("- correct POS on ambigous", corr_amb, corr_pos_amb_w/amb*100))
+                    f.write("{:>60} {:11d} {:8.2f}%\n".format("- correct POS on ambigous with POS disambig:", corr_pos_disamb_b, corr_pos_disamb_w/pos_disamb*100))
+                    f.write("{:>60} {:11d} {:8.2f}%\n".format("- correct POS on ambigous with no POS disambig:", corr_pos_nodisamb_b, corr_pos_nodisamb_w/pos_nodisamb*100))
+             
             with codecs.open(file_out_errors,'w','utf-8') as f:
                 #f.write("\n\nERRORS:\n")
-                f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format("word","prediction", "gold", "err_freq", "pos", "ambigous?", "can be POS disamb?", "tie?", "lines(test)"))
+                if not pos_statistics:
+                    f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format("word","prediction", "gold", "err_freq", "pos", 
+                        "ambigous?", "can be POS disamb?", "tie?", "lines(test)","amb dict"))
+                else:
+                    f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format("word","prediction", "gold", "pred pos", "gold pos", 
+                        "err_freq", "ambigous?", "can be POS disamb?", "tie?", "lines(test)","amb dict"))
                 orderd_w = sorted(errors.keys(), key=lambda v: v[1], reverse=True)
-                for (w,pred,true_pred,pos) in orderd_w:
+                for item in orderd_w:
+                    if not pos_statistics:
+                        w,pred,true_pred,pos = item
+                    else:
+                        w,pred,true_pred, pos_pred, pos = item
                     amb_type, pos_disamb_type,w_amb_tie =  False, False, False
                     amb_type = w in amb_segm_test.keys()
                     pos_disamb_type = (w,pos) in pos_disamb_test.keys()
                     if not pos_disamb_type:
                         if (w,pos) in pos_nodisamb_tie_test.keys():
                             w_amb_tie = True
-                    f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, len(errors[(w,pred,true_pred,pos)]), pos, amb_type, pos_disamb_type, w_amb_tie,  ", ".join(errors[(w,pred,true_pred,pos)])))
+                    amb_dict_string = train_seg_dict[w] if amb_type else ''
+                    if not pos_statistics:
+                        f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, 
+                            len(errors[(w,pred,true_pred,pos)]), pos, amb_type, pos_disamb_type, w_amb_tie,  
+                            ", ".join(errors[(w,pred,true_pred,pos)]), amb_dict_string))
+                    else:
+                        f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, 
+                            pos_pred, pos, len(errors[(w,pred,true_pred,pos_pred,pos)]), amb_type, pos_disamb_type, w_amb_tie,  
+                            ", ".join(errors[(w,pred,true_pred,pos_pred,pos)]), amb_dict_string))
 
     else:
         total_w_pred = sum(test_lexicon_w.values())
@@ -661,9 +788,11 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
         print "{:>60} {:11d} {:8.2f}%\n".format("- new (new morphemes):", corr_unseen_m_b, corr_unseen_m_b/unseen_m*100)
         print "{:>60} {:11d} {:8.2f}%\n".format("- new (new combination):", corr_unseen_comb_b, corr_unseen_comb_b/unseen_new_comb*100)
 
+
         if file_out_errors:
             with codecs.open(file_out_errors,'w','utf-8') as f:
                 #f.write("\n\nERRORS:\n")
+
                 f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format("word","prediction", "gold", "err_freq", "pos", "ambigous?", "can be POS disamb?", "tie?", "lines(test)"))
                 orderd_w = sorted(errors_b.keys(), key=lambda v: v[1], reverse=True)
                 for (w,pred,true_pred,pos) in orderd_w:
@@ -673,10 +802,10 @@ def evaluate_ambiguity(trainin,gold,input_format,lowercase=False,file_out_errors
                     if not pos_disamb_type:
                         if (w,pos) in pos_nodisamb_tie_test.keys():
                             w_amb_tie = True
-                    f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, len(errors_b[(w,pred,true_pred,pos)]), pos, amb_type, pos_disamb_type, w_amb_tie,  ", ".join(errors_b[(w,pred,true_pred,pos)])))
-
-
-def evaluate(trainin,gold,predict,file_out,file_out_errors,input_format,lowercase=False, ext_trainin=None, conll_format=False):
+                    f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, 
+                        len(errors_b[(w,pred,true_pred,pos)]), pos, amb_type, pos_disamb_type, w_amb_tie,  
+                        ", ".join(errors_b[(w,pred,true_pred,pos)])))
+def evaluate(trainin,gold,predict,file_out,file_out_errors,input_format,lowercase=False, ext_trainin=None, conll_format=False, pos_statistics=False):
     train_lexicon_m = defaultdict(int)
     test_lexicon_m = defaultdict(int)
     train_lexicon_w = defaultdict(int)
@@ -751,17 +880,21 @@ def evaluate(trainin,gold,predict,file_out,file_out_errors,input_format,lowercas
     # Collect predictions
     predict_f = codecs.open(predict,'r','utf-8')
     pred_dict_ext = {}
+    pred_dict_pos = {}
     for j, line in enumerate(predict_f):
         line = line.strip().lower() if lowercase else line.strip()
-        if len(line.split('\t'))>1:
+        if len(line.split('\t'))>2:
+            w, w_segm, pos = line.split('\t')
+            pred_dict_pos[(w,j+1)] = pos
+        elif len(line.split('\t'))>1:
             w, w_segm = line.split('\t')
         else:
             w = line.split('\t')[0]
             w_segm = ''
-        if j == 0:
-            print line
-            print w
-            print w_segm
+        #if j == 0:
+            #print line
+            #print w
+            #print w_segm
         pred_dict_ext[(w,j+1)] = w_segm
 
     #LM Evaluation
@@ -803,6 +936,12 @@ def evaluate(trainin,gold,predict,file_out,file_out_errors,input_format,lowercas
     unseen_new_comb = unseen - unseen_m
     corr_unseen_comb = 0 # number of correct unseen words - new combinations
 
+    if pos_statistics:
+        corr_pos_w = 0
+        corr_pos_seen_w = 0
+        corr_pos_unseen_w = 0
+        corr_pos_amb_w = 0
+
     gold_f.seek(0)
     for i,line in enumerate(gold_f):
         #if i < 5:
@@ -842,10 +981,29 @@ def evaluate(trainin,gold,predict,file_out,file_out_errors,input_format,lowercas
                         else:
                             corr_seen += 1
                 else:
-                    if (w,pred_dict_ext[(w,allc)], w_segm) not in errors.keys():
-                        errors[(w,pred_dict_ext[(w,allc)], w_segm)] = [lines]
+                    if not pos_statistics:
+                        if (w,pred_dict_ext[(w,allc)], w_segm) not in errors.keys():
+                            errors[(w,pred_dict_ext[(w,allc)], w_segm)] = [lines]
+                        else:
+                            errors[(w,pred_dict_ext[(w,allc)], w_segm)].append(lines)
                     else:
-                        errors[(w,pred_dict_ext[(w,allc)], w_segm)].append(lines)
+                        pos = lineitems[pos_col]
+                        if (w,pred_dict_ext[(w,allc)], w_segm,pred_dict_pos[(w,allc)],pos) not in errors.keys():
+                            errors[(w,pred_dict_ext[(w,allc)], w_segm, pred_dict_pos[(w,allc)], pos)] = [lines]
+                        else:
+                            errors[(w,pred_dict_ext[(w,allc)], w_segm,pred_dict_pos[(w,allc)],pos)].append(lines)
+                
+                if pos_statistics:
+                    pos = lineitems[pos_col]
+                    if pred_dict_pos[(w,allc)] == pos:
+                        corr_pos_w += 1
+                        if w in amb_segm_test.keys():
+                            corr_pos_amb_w += 1
+                        else:
+                            if w not in train_lexicon_w.keys():
+                                corr_pos_unseen_w += 1
+                            else:
+                                corr_pos_seen_w += 1
                     
                     
     with codecs.open(file_out,'w','utf-8') as f:
@@ -864,6 +1022,7 @@ def evaluate(trainin,gold,predict,file_out,file_out_errors,input_format,lowercas
         f.write("{:<50} {:21d} {:8.2f}%\n".format("# of new source word tokens - new target segments:", unseen_m, unseen_m/total_w_pred*100))
         f.write("{:<50} {:21d} {:8.2f}%\n".format("# of new source word tokens - new combination:", unseen_new_comb, unseen_new_comb/total_w_pred*100))
     
+        
         f.write("\nPERFORMANCE:\n")
         f.write("{:>60} {:11d}\n".format("Number of predictions total:", allc))
         f.write("{:>60} {:11d} {:8.2f}%\n".format("Number of correct predictions total:", corr, corr/allc*100))
@@ -879,11 +1038,28 @@ def evaluate(trainin,gold,predict,file_out,file_out_errors,input_format,lowercas
         f.write("{:>60} {:11d} {:8.2f}%\n".format("- new (new morphemes):", corr_unseen_m, corr_unseen_m/unseen_m*100))
         f.write("{:>60} {:11d} {:8.2f}%\n".format("- new (new combination):", corr_unseen_comb, corr_unseen_comb/unseen_new_comb*100))
 
+        if pos_statistics:
+            f.write("{:>60} {:11d} {:8.2f}%\n".format("Number of correct POS predictions total:", corr, corr_pos_w/allc*100))
+            if amb !=0:
+                f.write("{:>60} {:11d} {:8.2f}%\n".format("- correct POS on ambigous:", corr_amb, corr_pos_amb_w/amb*100))
+            if seen !=0:
+                f.write("{:>60} {:11d} {:8.2f}%\n".format("- correct POS on unique:", corr_seen, corr_pos_seen_w/seen*100))
+            f.write("{:>60} {:11d} {:8.2f}%\n".format("- correct POS on new:", corr_unseen, corr_pos_unseen_w/unseen*100))
+
+
     with codecs.open(file_out_errors,'w','utf-8') as f:
         #f.write("\n\nERRORS:\n")
-        f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format("word","prediction", "gold", "err_freq", "ambigous?", "new?", "unique?", "new morphemes?", "lines(test)"))
+        if not pos_statistics:
+            f.write(u'{}\n'.format(u'\t'.join(["word","prediction", "gold", "err_freq", "ambigous?", "new?", "unique?", "new morphemes?", "lines(test)"])))
+        else:
+            f.write(u'{}\n'.format(u'\t'.join(["word","prediction", "gold", "pred pos", "gold pos", "err_freq", "ambigous?", "new?", "unique?", "new morphemes?", "lines(test)"])))
         orderd_w = sorted(errors.keys(), key=lambda v: v[1], reverse=True)
-        for (w,pred,true_pred) in orderd_w:
+        for item in orderd_w:
+            if not pos_statistics:
+                w,pred,true_pred = item
+            else:
+                w,pred,true_pred, pos_pred, true_pos = item
+            ##print w,pred,true_pred, pos_pred, true_pos
 #            seen_w = w in train_lexicon_w.keys()
 #            seen_w, new_m = 'NA','NA'
             w_new,w_unique,w_amb,w_new_m = False, False, False,False
@@ -894,8 +1070,12 @@ def evaluate(trainin,gold,predict,file_out,file_out_errors,input_format,lowercas
                     w_new_m = not all(m in train_lexicon_m.keys() for m in true_pred.split(' '))
                 else:
                     w_unique = True
-            f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, len(errors[(w,pred,true_pred)]), amb_type, w_new, w_unique, w_new_m, ", ".join(errors[(w,pred,true_pred)])))
-
+            if not pos_statistics:
+                f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, len(errors[(w,pred,true_pred)]), 
+                    amb_type, w_new, w_unique, w_new_m, u', '.join(errors[(w,pred,true_pred)])))
+            else:
+                f.write(u'{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(w, pred, true_pred, pos_pred, true_pos, len(errors[(w,pred,true_pred,pos_pred,true_pos)]), 
+                amb_type, w_new, w_unique, w_new_m, u', '.join(errors[(w,pred,true_pred,pos_pred,true_pos)])))
 if __name__ == "__main__":
     arguments = docopt(__doc__)
     print arguments
@@ -907,14 +1087,17 @@ if __name__ == "__main__":
     file_out_errors = arguments['RESULTS_ERRORS_FILE']
     input_format_arg = arguments['--input_format']
     input_format=[int(col) for col in input_format_arg.split(',')]
+    lowercase = True if arguments['--lowercase']=='True' else False
     
     if arguments['eval']:
-        evaluate(trainin,gold,predict,file_out,file_out_errors, input_format,arguments['--lowercase'],arguments['--extended_train_data'],arguments['--conll_format'])
+        evaluate(trainin,gold,predict,file_out,file_out_errors, input_format,lowercase,arguments['--extended_train_data'],arguments['--conll_format'],arguments['--pos_statistics'])
     elif arguments['eval_baseline']:
         evaluate_baseline(trainin,gold, input_format,arguments['--lowercase'],arguments['--error_file'],arguments['--conll_format'])
     elif arguments['eval_ambiguity']:
-        evaluate_ambiguity(trainin,gold, input_format,arguments['--lowercase'],file_out_errors,predict,file_out,arguments['--conll_format'])
+        evaluate_ambiguity(trainin,gold, input_format,lowercase,file_out_errors,predict,file_out,arguments['--conll_format'],arguments['--pos_statistics'])
     elif arguments['eval_ambiguity_baseline']:
         evaluate_ambiguity(trainin,gold, input_format,lowercase=arguments['--lowercase'],file_out_errors = arguments['--error_file'],conll_format = arguments['--conll_format'])
+    elif arguments['print_ambiguity']:
+        print_ambiguity(trainin,input_format,lowercase,file_out, arguments['--conll_format'])
     else:
         print "Unknown option"

@@ -8,9 +8,10 @@ PREFIX = sys.argv[1] # arch-8-context-shuff
 
 results = {}
 pos_baseline = {}
-models = ['norm_soft', 'norm_soft_char_context','norm_soft_char_context_pos','norm_soft_char_context_pos_aux','norm_soft_pos']
+#models = ['norm_soft', 'norm_soft_char_context','norm_soft_char_context_pos','norm_soft_char_context_pos_aux','norm_soft_pos']
+models = ['norm_soft_char_context','norm_soft_char_context_pos','norm_soft_char_context_pos_aux','norm_soft_pos']
 model_names = ['nmt','context','context_pos','context_pos_aux','pos']
-datasets = ['test']
+datasets = ['dev']
 #settings = ['nmt', 'we_t', 'we']
 settings = ['nmt', 'we']
 #setting_names  = ['Arch', 'Arch+SMS-data', 'Arch+OpenSub-data' ]
@@ -24,7 +25,7 @@ for data in datasets:
     for cat in data_cats:
         pos_baseline[data][cat] = {}
 #    print('../results/{}/baseline/baseline-pos.{}.eval'.format(PREFIX,data))
-    result_path = glob.glob('../results/{}/baseline/baseline-pos.{}.eval'.format(PREFIX,data))
+    result_path = glob.glob('/gennorm/normalization/results/{}/baseline/baseline-pos.{}.eval'.format(PREFIX,data))
     with open(result_path[0]) as f:
         for line in f:
             m_total = re.search('(\s+)Number\sof\scorrect\spredictions\stotal:(\s+)([\d]+)(\s+)([\d\.]+)%$', line)
@@ -71,9 +72,9 @@ for data in datasets:
             results[data][model][setting] = {}
 #            print('{:>30s}'.format('{} set:'.format(data)))
 #            print('{:>30s}'.format('ensemble:'))
-#            print '../results/{}/{}_sync/ensemble/{}/{}.eval.det'.format(PREFIX,model,setting,data)
-            result_path = glob.glob('../results/{}/{}_sync/ensemble/{}/{}.eval.det'.format(PREFIX,model,setting,data))
-            #print(result_path[0])
+            print '/gennorm/normalization/results/{}/{}_sync/ensemble/{}/{}.eval.det'.format(PREFIX,model,setting,data)
+            result_path = glob.glob('/gennorm/normalization/results/{}/{}_sync/ensemble/{}/{}.eval.det'.format(PREFIX,model,setting,data))
+            print(result_path[0])
             with open(result_path[0]) as f:
                 for line in f:
                     #print(line)
@@ -89,7 +90,7 @@ for data in datasets:
                         results[data][model][setting]['new'] = float(m_new.group(5))
                     if m_un:
                         results[data][model][setting]['unique'] = float(m_un.group(5))
-            result_path = glob.glob('../results/{}/{}_sync/ensemble/{}/{}.eval.det.pos'.format(PREFIX,model,setting,data))
+            result_path = glob.glob('/gennorm/normalization/results/{}/{}_sync/ensemble/{}/{}.eval.det.pos'.format(PREFIX,model,setting,data))
             #print(result_path[0])
             with open(result_path[0]) as f:
                 for line in f:

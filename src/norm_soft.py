@@ -323,7 +323,8 @@ class SoftAttention(object):
 #                print predictions
             final_results.append((input,prediction))  # pred expected as list
         accuracy = correct / len(data)
-        return accuracy, final_results
+        accuracy_dict = {'Accuracy':accuracy}
+        return accuracy_dict, final_results
 
 
     def param_init(self, input): #initialize parameters for current cg with the current input
@@ -605,7 +606,8 @@ def evaluate_ensemble(nmt_models, data, beam):
 #            print predictions
         final_results.append((input,prediction))  # pred expected as list
     accuracy = correct / len(data)
-    return accuracy, final_results
+    accuracy_dict = {'Accuracy':accuracy}
+    return accuracy_dict, final_results
 
 
 def predict_ensemble(nmt_models, input, beam_size, ignore_first_eol=False, as_arrays=False):

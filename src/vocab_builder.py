@@ -131,6 +131,7 @@ def apply(file_in, file_out, vocab_path, over_segs=False, lowercase=False):
                             f_out.write(u'{}\n'.format(BOUNDARY_CHAR.join(mapped_items)))
                         else:
                             # Chars
+
                             mapped_items = [str(vocab.w2i.get(c, vocab.w2i[UNK_CHAR])) for c in target]
                             f_out.write(u'{}\n'.format(' '.join(mapped_items)))
 #                    except:

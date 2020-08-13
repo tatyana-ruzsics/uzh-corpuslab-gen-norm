@@ -111,7 +111,7 @@ def load_data_pos_ext(filename, input_format, lowercase=False, split_by_space=Fa
         where each element in the list is one example
         """
     print 'loading data from file:', filename
-    #print lowercase
+    print lowercase
     
     input_col, output_col, feat_col = input_format
     
@@ -124,8 +124,8 @@ def load_data_pos_ext(filename, input_format, lowercase=False, split_by_space=Fa
                     #try:
                         splt = line.strip().split('\t')
     #                    print splt
-                        input_string = splt[input_col].lower() if lowercase=='True' else splt[input_col]
-                        output_string = splt[output_col].lower() if lowercase=='True' else splt[output_col]
+                        input_string = splt[input_col].lower() if lowercase==True else splt[input_col]
+                        output_string = splt[output_col].lower() if lowercase==True else splt[output_col]
                         if cap_mask:
                             input_string = cap2mask(input_string)
                             output_string = cap2mask(output_string)
@@ -137,7 +137,6 @@ def load_data_pos_ext(filename, input_format, lowercase=False, split_by_space=Fa
                             #         input_string_mod += char
                             # input_string = input_string_mod
                             # if i<5 : print input_string, input_string_mod
-                            
                             # output_string_mod=''
                             # for char in output_string:
                             #     if char.isupper():
@@ -172,8 +171,8 @@ def load_data_pos_ext(filename, input_format, lowercase=False, split_by_space=Fa
                             #try:
                                 splt = line.strip().split('\t')
                                 #                    print splt
-                                input_string = splt[input_col].lower() if lowercase=='True' else splt[input_col]
-                                output_string = splt[output_col].lower() if lowercase=='True' else splt[output_col]
+                                input_string = splt[input_col].lower() if lowercase==True else splt[input_col]
+                                output_string = splt[output_col].lower() if lowercase==True else splt[output_col]
                                 if cap_mask:
                                     input_string = cap2mask(input_string)
                                     output_string = cap2mask(output_string)
@@ -577,12 +576,13 @@ class SoftAttention(object):
             if not pointer:
                 return dy.softmax(R * h_output + bias)
             else:
-                return np.argmax(alphas.npvalue()), dy.softmax(R * h_output + bias)
+                return np.argmax(alphas.npvalue()[1:-1]), dy.softmax(R * h_output + bias)
         else:
 #            print 'scores:'
             if not pointer:
                 return R * h_output + bias
-            else: np.argmax(alphas.npvalue()), R * h_output + bias
+            else: 
+                return np.argmax(alphas.npvalue()[1:-1]), R * h_output + bias
 
 
 
@@ -606,7 +606,7 @@ class SoftAttention(object):
         #        print 'new sent'
         for position,(input,_true_output, pos_feature) in enumerate(zip(inputs, _true_outputs, pos_features)):
             self.reset_decoder()
-            true_output = [self.char_vocab.w2i[a] for a in _true_output]
+            true_output = [self.char_vocab.w2i.get(a,self.UNK) for a in _true_output]
             true_output += [self.STOP]
             
             losses = []
@@ -634,7 +634,7 @@ class SoftAttention(object):
 #        print 'new sent'
         for position,(input,_true_output) in enumerate(zip(inputs, _true_outputs)):
             self.reset_decoder()
-            true_output = [self.char_vocab.w2i[a] for a in _true_output]
+            true_output = [self.char_vocab.w2i.get(a,self.UNK) for a in _true_output]
             true_output += [self.STOP]
             losses = []
             for pred_id in true_output:
@@ -719,7 +719,7 @@ class SoftAttention(object):
         all_outputs = np.full(shape=(1,beam_size),fill_value=self.BEGIN,dtype = int)
         all_masks = np.ones_like(all_outputs, dtype=float) # whether predicted symbol is self.STOP
         all_costs = np.zeros_like(all_outputs, dtype=float) # the cumulative cost of predictions
-        all_pointers = np.zeros_like(all_outputs, dtype=float) # the positions of charachter attention pointers
+        all_pointers = np.zeros_like(all_outputs, dtype=int) # the positions of charachter attention pointers
         
         for i in range(MAX_PRED_SEQ_LEN):
             if all_masks[-1].sum() == 0:
@@ -727,10 +727,16 @@ class SoftAttention(object):
         
             # We carefully hack values of the `logprobs` array to ensure
             # that all finished sequences are continued with `eos_symbol`.
-            #scores,pointers = zip(*[self.predict_next_(s, position, scores=True,pointer=True) for s in states])
-            #logprobs = np.array(-dy.log_softmax(scores.npvalue()))
+            if beam_size>1:
+                pointers,_scores = zip(*[self.predict_next_(s, position, scores=True,pointer=True) for s in states])
+                logprobs = np.array([-dy.log_softmax(s).npvalue() for s in _scores])
+            else:
+                pointers,_scores = self.predict_next_(states[0], position, scores=True,pointer=True)
+                logprobs = np.array(-dy.log_softmax(_scores).npvalue())
+                pointers=[pointers]
+            
 
-            logprobs = np.array([-dy.log_softmax(self.predict_next_(s, position, scores=True)).npvalue() for s in states])
+            #logprobs = np.array([-dy.log_softmax(self.predict_next_(s, position, scores=True)).npvalue() for s in states])
 #            print logprobs
 #            print all_masks[-1, :, None]
             next_costs = (all_costs[-1, :, None] + logprobs * all_masks[-1, :, None]) #take last row of cumul prev costs and turn into beam_size X 1 matrix, take logprobs distributions for unfinished hypos only and add it (elem-wise) with the array of prev costs; result: beam_size x vocab_len matrix of next costs
@@ -746,6 +752,7 @@ class SoftAttention(object):
             all_outputs = all_outputs[:, indexes]
             all_masks = all_masks[:, indexes]
             all_costs = all_costs[:, indexes]
+            all_pointers = all_pointers[:, indexes]
             
             # Record chosen output and compute new states
             states = [self.consume_next_(s,pred_id) for s,pred_id in zip(new_states, outputs)]
@@ -755,27 +762,38 @@ class SoftAttention(object):
             if ignore_first_eol: #and i == 0:
                 mask[:] = 1
             all_masks = np.vstack([all_masks, mask[None, :]])
+            #import pdb; pdb.set_trace() 
+            #if beam_size>1:
+            #    all_pointers = np.vstack([all_pointers, np.array(pointers)[:,indexes]])
+            #else:
+            all_pointers = np.vstack([all_pointers, np.array(pointers)[indexes]])
 
         all_outputs = all_outputs[1:] # skipping first row of self.BEGIN
         all_masks = all_masks[1:-1] #? all_masks[:-1] # skipping first row of self.BEGIN and the last row of self.STOP
         all_costs = all_costs[1:] - all_costs[:-1] #turn cumulative cost ito cost of each step #?actually the last row would suffice for us?
-        result = all_outputs, all_masks, all_costs
+        all_pointers = all_pointers[1:-1]
+        result = all_outputs, all_masks, all_costs, all_pointers
         if not predict_pos:
-             return self.result_to_lists(self.char_vocab,result)
+             return self.result_to_lists(self.char_vocab, result, input)
         else:
             log_probs =  dy.log(self.predict_pos(position))
             pred_pos_id = np.argmax(log_probs.npvalue())
             pred_pos_tag = self.feat_vocab.i2w.get(pred_pos_id, UNK_CHAR)
-            return pred_pos_tag, self.result_to_lists(self.char_vocab,result)
+            return pred_pos_tag, self.result_to_lists(self.char_vocab, result, input)
     
     @staticmethod
-    def result_to_lists(vocab, result):
-        outputs, masks, costs = [array.T for array in result]
+    def result_to_lists(vocab, result, input):
+        #import pdb; pdb.set_trace()
+        UNK = vocab.w2i[UNK_CHAR] 
+        outputs, masks, costs, pointers = [array.T for array in result]
         outputs = [list(output[:int(mask.sum())]) for output, mask in zip(outputs, masks)]
-        words = [u''.join([vocab.i2w.get(pred_id,UNK_CHAR) for pred_id in output]) for output in outputs]
+        try:
+            words = [u''.join([vocab.i2w.get(pred_id,UNK_CHAR) if pred_id!=UNK else input[pointer[i]] for i,pred_id in enumerate(output)]) for output,pointer in zip(outputs,pointers)]
+        except:
+            print output, pointer, input,  u''.join([vocab.i2w.get(pred_id,UNK_CHAR) for i,pred_id in enumerate(output)])
         costs = list(costs.T.sum(axis=0))
         # if cap_mask:
-        #     for k,word in enumerate(words):
+        #     for word in words:
         #         capitalize=False
         #         word_mod = ''
         #         for char in word:
@@ -787,12 +805,11 @@ class SoftAttention(object):
         #                     capitalize=False
         #                 else:
         #                     word_mod+=char
-        #         words[k]=word_mod
+        #         word=word_mod
 
         results = zip(costs, words)
         results.sort(key=lambda h: h[0])
         return results
-
 
     def evaluate(self, data, beam, predict_pos=False):
         # data is a list of tuples (an instance of SoftDataSet with iter method applied)
@@ -821,7 +838,6 @@ class SoftAttention(object):
                     if self.hyperparams['MASK_CAPS']:
                         input=mask2cap(input)
                         prediction=mask2cap(prediction)
-                    
                     final_results.append((input,prediction))
                 else:
                     pos_tag,predictions = self.predict(input, position, beam, predict_pos = True)
@@ -833,11 +849,11 @@ class SoftAttention(object):
                     if self.hyperparams['MASK_CAPS']:
                         input=mask2cap(input)
                         prediction=mask2cap(prediction)
-                    
                     final_results.append((input,prediction,pos_tag))
                 #prediction = predictions[0][1]
             #            print i, input, predictions
-                
+                # if prediction == output:
+                #     correct += 1
 #                    print u'{}, input: {}, pred: {}, true: {}'.format(i, input, prediction, output)
 #                    print predictions
 #                else:
@@ -912,7 +928,7 @@ def evaluate_ensemble(nmt_models, data, beam, predict_pos=False):
         accuracy_dict = {'Accuracy':accuracy,'POS accuracy':accuracy_tag}
         return accuracy_dict, final_results
 
-
+#TODO - add unk char prediction
 def predict_ensemble(nmt_models, input, position, beam_size, ignore_first_eol=False, predict_pos=False):
     """Performs beam search for ensemble of models.
     If the beam search was not compiled, it also compiles it.
@@ -951,6 +967,7 @@ def predict_ensemble(nmt_models, input, position, beam_size, ignore_first_eol=Fa
     all_outputs = np.full(shape=(1,beam_size),fill_value=BEGIN,dtype = int)
     all_masks = np.ones_like(all_outputs, dtype=float) # whether predicted symbol is self.STOP
     all_costs = np.zeros_like(all_outputs, dtype=float) # the cumulative cost of predictions
+    all_pointers = np.zeros_like(all_outputs, dtype=float) # the positions of charachter attention pointers
 
     for i in range(MAX_PRED_SEQ_LEN):
         if all_masks[-1].sum() == 0:
@@ -1036,7 +1053,7 @@ def result_to_lists(nmt_vocab, result):
     outputs = [list(output[:int(mask.sum())]) for output, mask in zip(outputs, masks)]
     words = [u''.join([nmt_vocab.i2w.get(pred_id,UNK_CHAR) for pred_id in output]) for output in outputs]
     # if cap_mask:
-    #         for k,word in enumerate(words):
+    #         for word in words:
     #             capitalize=False
     #             word_mod = ''
     #             for char in word:
@@ -1048,7 +1065,7 @@ def result_to_lists(nmt_vocab, result):
     #                         capitalize=False
     #                     else:
     #                         word_mod+=char
-    #             words[k]=word_mod
+    #             word=word_mod
     costs = list(costs.T.sum(axis=0))
     results = zip(costs, words)
     results.sort(key=lambda h: h[0])
@@ -1136,7 +1153,7 @@ if __name__ == "__main__":
                 char_vocab_path = os.path.join(model_folder,arguments['--char_vocab_path']) # no vocab - use default name
                 print 'Building char vocabulary..'
                 data = set(train_data.inputs + train_data.outputs)
-                build_vocabulary(data, char_vocab_path)
+                build_vocabulary(data, char_vocab_path, vocab_trunk=0.1)
                     
         if os.path.exists(arguments['--feat_vocab_path']):
                 feat_vocab_path = arguments['--feat_vocab_path'] # absolute path  to existing vocab file
@@ -1285,7 +1302,7 @@ if __name__ == "__main__":
                 dev_accuracy=dev_accuracy_dict['Accuracy']
                 dev_acc_tag=dev_accuracy_dict['POS accuracy']
             print '\t...finished in {:.3f} sec'.format(time.time() - then)
-            #write_pred_file(output_file_path, dev_results)
+            write_pred_file(output_file_path, dev_results)
 
             if dev_accuracy > best_dev_accuracy:
                 best_dev_accuracy = dev_accuracy
@@ -1361,11 +1378,6 @@ if __name__ == "__main__":
         model_hyperparams['FEAT_VOCAB_PATH'] = check_path(model_folder + '/feat_vocab.txt', 'vocab_path', is_data_path=False)
         model_hyperparams['FEAT_VOCAB_PATH_IN'] = check_path(model_folder + '/feat_vocab_in.txt', 'vocab_path', is_data_path=False)
         
-        print 'Test Hypoparameters:'
-        for k, v in model_hyperparams.items():
-            print '{:20} = {}'.format(k, v)
-        print
-
         pc = dy.ParameterCollection()
         ti = SoftAttention(pc, model_hyperparams, best_model_path)
 

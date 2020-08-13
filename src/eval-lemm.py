@@ -90,7 +90,7 @@ for data in datasets:
             results[data][model][lang]['seed_ave'] = {}
             for category in ['total', 'ambiguous', 'unique', 'new']:
                 results[data][model][lang]['seed_ave'][category] = []
-            for seed in range(1,6):
+            for seed in range(5,6):
                 #print('/gennorm/lemmatization/{}/{}_{}/{}.eval.det'.format(lang,model,seed,data))
                 result_path = glob.glob('/gennorm/lemmatization/{}/{}_{}/{}.eval.det'.format(lang,model,seed,data))
                 #print(result_path[0])

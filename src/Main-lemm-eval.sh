@@ -14,6 +14,15 @@
 # Usage: ./Main-lemm-eval.sh ud-treebanks-v2.0/UD_Basque/eu ud-test-v2.0-conll2017/gold/conll17-ud-test-2017-05-09/eu lemm/Basque norm_soft_char_context ens 5 3 pos
 # NMT+Context+Pred POS ensemble evaluation
 # Usage: ./Main-lemm-eval.sh ud-treebanks-v2.0/UD_Basque/eu ud-test-v2.0-conll2017/gold/conll17-ud-test-2017-05-09/eu lemm/Basque norm_soft_char_context ens 5 3 pos_aux
+# NMT+Context+Pred POS with no lowercasing ensemble evaluation
+# Usage: ./Main-lemm-eval.sh ud-treebanks-v2.0/UD_Basque/eu ud-test-v2.0-conll2017/gold/conll17-ud-test-2017-05-09/eu lemm/Basque norm_soft_char_context ens 5 3 pos_aux_no_low
+# NMT+Pred POS ensemble evaluation
+# Usage: ./Main-lemm-eval.sh ud-treebanks-v2.0/UD_Basque/eu ud-test-v2.0-conll2017/gold/conll17-ud-test-2017-05-09/eu lemm/Basque norm_soft_char_context ens 5 3 pos_aux_no_cont
+# NMT+Pred POS with no lowercasing ensemble evaluation
+# Usage: ./Main-lemm-eval.sh ud-treebanks-v2.0/UD_Basque/eu ud-test-v2.0-conll2017/gold/conll17-ud-test-2017-05-09/eu lemm/Basque norm_soft_char_context ens 5 3 pos_aux_no_cont_no_low
+# NMT+Pred POS with mask cap ensemble evaluation
+# Usage: ./Main-lemm-eval.sh ud-treebanks-v2.0/UD_Basque/eu ud-test-v2.0-conll2017/gold/conll17-ud-test-2017-05-09/eu lemm/Basque norm_soft_char_context ens 5 3 pos_aux_no_cont_cap_mask
+
 
 # *_DATA_FOLDER_NAME - where the data is saved
 # Pretrained source context NMT model folders name pattern: {RESULTS_FOLDER}/{NMT_MODEL_TYPE}_{NMT_MODEL_SPEC}_{NMT_SEED}
@@ -27,6 +36,7 @@
 
 export DIR=/home/tanja/uzh-corpuslab-gen-norm
 
+#export DATADIR=/gennorm/lemmatization
 
 export INPUT_FORMAT="1,2,3"
 
@@ -34,12 +44,16 @@ export INPUT_FORMAT="1,2,3"
 if [[ $4 == 'baseline' ]]; then
 
 # data paths
-export TRAINDATA=$DIR/data/$1-ud-train.conllu
-export DEVDATA=$DIR/data/$1-ud-dev.conllu
-export TESTDATA=$DIR/data/$2.conllu
+# export TRAINDATA=$DATADIR/data/$1-ud-train.conllu
+# export DEVDATA=$DATADIR/data/$1-ud-dev.conllu
+# export TESTDATA=$DATADIR/data/$2.conllu
+export TRAINDATA=/$1-ud-train.conllu
+export DEVDATA=/$1-ud-dev.conllu
+export TESTDATA=/$2.conllu
 
 # results folder
-export MODEL=$DIR/results/$3
+#export MODEL=$DATADIR/results/$3
+export MODEL=$3
 mkdir -p $MODEL/baseline
 export RESULTS=$MODEL/baseline
 
@@ -55,12 +69,16 @@ else
 ####NMT####
 
 # data paths
-export TRAINDATA=$DIR/data/$1-ud-train.conllu
-export DEVDATA=$DIR/data/$1-ud-dev.conllu
-export TESTDATA=$DIR/data/$2.conllu
+# export TRAINDATA=$DATADIR/data/$1-ud-train.conllu
+# export DEVDATA=$DATADIR/data/$1-ud-dev.conllu
+# export TESTDATA=$DATADIR/data/$2.conllu
+export TRAINDATA=/$1-ud-train.conllu
+export DEVDATA=/$1-ud-dev.conllu
+export TESTDATA=/$2.conllu
 
 #Pretrained NMT model
-#export MODEL=$DIR/results/$3
+#export MODEL=$DATADIR/results/$3
+#export MODEL=$DATADIR/$3
 export MODEL=$3
 export BEAM=$7
 export NMT_TYPE=$4
@@ -91,30 +109,87 @@ fi
 echo "$nmt_path"
 
 # ensemble predictions
-#python $DIR/src/${NMT_TYPE}.py ensemble_test ${nmt_path} --test_path=$DEVDATA --beam=$BEAM --pred_path=dev.out $RESULTS --input_format=${INPUT_FORMAT} --conll_format
-#python $DIR/src/${NMT_TYPE}.py ensemble_test ${nmt_path} --test_path=$TESTDATA --beam=$BEAM --pred_path=test.out $RESULTS --input_format=${INPUT_FORMAT} --conll_format
+if [[ $8 == *"no_low"* ]]; then
+python $DIR/src/${NMT_TYPE}.py ensemble_test ${nmt_path} --test_path=$DEVDATA --beam=$BEAM --pred_path=dev.out $RESULTS --input_format=${INPUT_FORMAT} --conll_format --lowercase=False
+python $DIR/src/${NMT_TYPE}.py ensemble_test ${nmt_path} --test_path=$TESTDATA --beam=$BEAM --pred_path=test.out $RESULTS --input_format=${INPUT_FORMAT} --conll_format --lowercase=False
+else
+python $DIR/src/${NMT_TYPE}.py ensemble_test ${nmt_path} --test_path=$DEVDATA --beam=$BEAM --pred_path=dev.out $RESULTS --input_format=${INPUT_FORMAT} --conll_format
+python $DIR/src/${NMT_TYPE}.py ensemble_test ${nmt_path} --test_path=$TESTDATA --beam=$BEAM --pred_path=test.out $RESULTS --input_format=${INPUT_FORMAT} --conll_format
+fi	
+
 #
-## evaluate ensemble on tokens - detailed output
-#python $DIR/src/accuracy-det.py eval $TRAINDATA $DEVDATA $RESULTS/dev.out.predictions $RESULTS/dev.eval.det $RESULTS/Errors_dev.txt --input_format=${INPUT_FORMAT} --conll_format
-#python $DIR/src/accuracy-det.py eval $TRAINDATA $TESTDATA $RESULTS/test.out.predictions $RESULTS/test.eval.det $RESULTS/Errors_test.txt --input_format=${INPUT_FORMAT} --conll_format
+# evaluate ensemble on tokens - detailed output
+if  [[ $8 == *'pos_aux'* ]]; then
+	if [[ $8 == *"no_low"* ]]; then
+		python $DIR/src/accuracy-det.py eval $TRAINDATA $DEVDATA $RESULTS/dev.out.predictions $RESULTS/dev.eval.det $RESULTS/Errors_dev.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics --lowercase=False
+		python $DIR/src/accuracy-det.py eval $TRAINDATA $TESTDATA $RESULTS/test.out.predictions $RESULTS/test.eval.det $RESULTS/Errors_test.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics --lowercase=False
+	else
+		python $DIR/src/accuracy-det.py eval $TRAINDATA $DEVDATA $RESULTS/dev.out.predictions $RESULTS/dev.eval.det $RESULTS/Errors_dev.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics
+		python $DIR/src/accuracy-det.py eval $TRAINDATA $TESTDATA $RESULTS/test.out.predictions $RESULTS/test.eval.det $RESULTS/Errors_test.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics
+	fi
+else
+python $DIR/src/accuracy-det.py eval $TRAINDATA $DEVDATA $RESULTS/dev.out.predictions $RESULTS/dev.eval.det $RESULTS/Errors_dev.txt --input_format=${INPUT_FORMAT} --conll_format
+python $DIR/src/accuracy-det.py eval $TRAINDATA $TESTDATA $RESULTS/test.out.predictions $RESULTS/test.eval.det $RESULTS/Errors_test.txt --input_format=${INPUT_FORMAT} --conll_format
+fi
 
 ##evaluate ensemble - ambuguity on tokens
+if  [[ $8 == *'pos_aux'* ]]; then
+	if [[ $8 == *"no_low"* ]]; then
+		python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $DEVDATA $RESULTS/dev.out.predictions $RESULTS/dev.eval.det.pos $RESULTS/Errors_dev_pos.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics --lowercase=False
+		python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $TESTDATA $RESULTS/test.out.predictions $RESULTS/test.eval.det.pos $RESULTS/Errors_test_pos.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics --lowercase=False
+	else
+		python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $DEVDATA $RESULTS/dev.out.predictions $RESULTS/dev.eval.det.pos $RESULTS/Errors_dev_pos.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics
+		python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $TESTDATA $RESULTS/test.out.predictions $RESULTS/test.eval.det.pos $RESULTS/Errors_test_pos.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics
+	fi
+else
 python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $DEVDATA $RESULTS/dev.out.predictions $RESULTS/dev.eval.det.pos $RESULTS/Errors_dev_pos.txt --input_format=${INPUT_FORMAT} --conll_format
-#python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $TESTDATA $RESULTS/test.out.predictions $RESULTS/test.eval.det.pos $RESULTS/Errors_test_pos.txt --input_format=${INPUT_FORMAT} --conll_format
-
+python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $TESTDATA $RESULTS/test.out.predictions $RESULTS/test.eval.det.pos $RESULTS/Errors_test_pos.txt --input_format=${INPUT_FORMAT} --conll_format
+fi	
 
 else
 ## individual model
 export NMT_SEED=$6
 export RESULTS=$MODEL/${NMT_FULL_TYPE}_${NMT_SEED}
 
-# evaluate ensemble on tokens - detailed output
-#python $DIR/src/accuracy-det.py eval $TRAINDATA $DEVDATA $RESULTS/best.dev.3.predictions $RESULTS/dev.eval.det $RESULTS/Errors_dev.txt --input_format=${INPUT_FORMAT} --conll_format
-python $DIR/src/accuracy-det.py eval $TRAINDATA $TESTDATA $RESULTS/best.test.3.predictions $RESULTS/test.eval.det $RESULTS/Errors_test.txt --input_format=${INPUT_FORMAT} --conll_format
+if [[ $8 == *"no_low"* ]]; then
+python $DIR/src/${NMT_TYPE}.py test ${nmt_path} --test_path=$DEVDATA --beam=$BEAM --pred_path=best.dev.3 $RESULTS --input_format=${INPUT_FORMAT} --conll_format --lowercase=False
+python $DIR/src/${NMT_TYPE}.py test ${nmt_path} --test_path=$TESTDATA --beam=$BEAM --pred_path=best.test.3 $RESULTS --input_format=${INPUT_FORMAT} --conll_format --lowercase=False
+else
+python $DIR/src/${NMT_TYPE}.py test ${nmt_path} --test_path=$DEVDATA --beam=$BEAM --pred_path=best.dev.3 $RESULTS --input_format=${INPUT_FORMAT} --conll_format
+python $DIR/src/${NMT_TYPE}.py test ${nmt_path} --test_path=$TESTDATA --beam=$BEAM --pred_path=best.test.3 $RESULTS --input_format=${INPUT_FORMAT} --conll_format
+fi
 
-##evaluate ensemble - ambuguity on tokens - detailed output for the test set
-#python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $DEVDATA $RESULTS/best.dev.3.predictions $RESULTS/dev.eval.det.pos $RESULTS/Errors_dev_pos.txt --input_format=${INPUT_FORMAT} --conll_format
+
+## evaluate - detailed output
+if  [[ $8 == *'pos_aux'* ]]; then
+	if [[ $8 == *"no_low"* ]]; then
+		python $DIR/src/accuracy-det.py eval $TRAINDATA $DEVDATA $RESULTS/best.dev.3.predictions $RESULTS/dev.eval.det $RESULTS/Errors_dev.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics --lowercase=False
+		python $DIR/src/accuracy-det.py eval $TRAINDATA $TESTDATA $RESULTS/best.test.3.predictions $RESULTS/test.eval.det $RESULTS/Errors_test.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics --lowercase=False
+	else
+		python $DIR/src/accuracy-det.py eval $TRAINDATA $DEVDATA $RESULTS/best.dev.3.predictions $RESULTS/dev.eval.det $RESULTS/Errors_dev.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics
+		python $DIR/src/accuracy-det.py eval $TRAINDATA $TESTDATA $RESULTS/best.test.3.predictions $RESULTS/test.eval.det $RESULTS/Errors_test.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics
+	fi
+else
+python $DIR/src/accuracy-det.py eval $TRAINDATA $DEVDATA $RESULTS/best.dev.3.predictions $RESULTS/dev.eval.det $RESULTS/Errors_dev.txt --input_format=${INPUT_FORMAT} --conll_format
+python $DIR/src/accuracy-det.py eval $TRAINDATA $TESTDATA $RESULTS/best.test.3.predictions $RESULTS/test.eval.det $RESULTS/Errors_test.txt --input_format=${INPUT_FORMAT} --conll_format
+fi
+
+
+##evaluate - ambuguity on tokens - detailed output for the test set
+if  [[ $8 == *'pos_aux'* ]]; then
+	if [[ $8 == *"no_low"* ]]; then
+		python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $DEVDATA $RESULTS/best.dev.3.predictions $RESULTS/dev.eval.det.pos $RESULTS/Errors_dev_pos.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics --lowercase=False
+		python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $TESTDATA $RESULTS/best.test.3.predictions $RESULTS/test.eval.det.pos $RESULTS/Errors_test_pos.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics --lowercase=False
+	else
+		python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $DEVDATA $RESULTS/best.dev.3.predictions $RESULTS/dev.eval.det.pos $RESULTS/Errors_dev_pos.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics
+		python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $TESTDATA $RESULTS/best.test.3.predictions $RESULTS/test.eval.det.pos $RESULTS/Errors_test_pos.txt --input_format=${INPUT_FORMAT} --conll_format --pos_statistics
+	
+	fi
+else
+python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $DEVDATA $RESULTS/best.dev.3.predictions $RESULTS/dev.eval.det.pos $RESULTS/Errors_dev_pos.txt --input_format=${INPUT_FORMAT} --conll_format
 python $DIR/src/accuracy-det.py eval_ambiguity $TRAINDATA $TESTDATA $RESULTS/best.test.3.predictions $RESULTS/test.eval.det.pos $RESULTS/Errors_test_pos.txt --input_format=${INPUT_FORMAT} --conll_format
+
+fi
 
 fi
 fi

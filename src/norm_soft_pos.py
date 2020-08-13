@@ -255,7 +255,8 @@ class SoftAttention(object):
 #                print predictions
             final_results.append((input,prediction))  # pred expected as list
         accuracy = correct / len(data)
-        return accuracy, final_results
+        accuracy_dict = {'Accuracy':accuracy}
+        return accuracy_dict, final_results
 
 
     def param_init(self, input, features): #initialize parameters for current cg with the current input
@@ -546,7 +547,8 @@ def evaluate_ensemble(nmt_models, data, beam, verbose=False):
 #            print predictions
         final_results.append((input,prediction))  # pred expected as list
     accuracy = correct / len(data)
-    return accuracy, final_results
+    accuracy_dict = {'Accuracy':accuracy}
+    return accuracy_dict, final_results
 
 
 def predict_ensemble(nmt_models, input, features, beam_size, ignore_first_eol=False, as_arrays=False):
@@ -776,10 +778,11 @@ if __name__ == "__main__":
                             'TRAIN_PATH': train_path,
                             'DEV_PATH': dev_path}
 
-        print 'Train Hypoparameters:'
-        for k, v in train_hyperparams.items():
-            print '{:20} = {}'.format(k, v)
-        print
+        # print 'Train Hypoparameters:'
+        # for k, v in train_hyperparams.items():
+        #     print '{:20} = {}'.format(k, v)
+        # print
+        write_param_file(output_file_path, dict(model_hyperparams.items()+train_hyperparams.items()))
         
         trainer = OPTIMIZERS[train_hyperparams['OPTIMIZATION']]
         trainer = trainer(pc)
@@ -818,14 +821,18 @@ if __name__ == "__main__":
             print 'evaluating on train...'
             dy.renew_cg() # new graph for all the examples
             then = time.time()
-            train_accuracy, _ = ti.evaluate(train_data.iter(indices=sanity_set_size), int(arguments['--beam']))
+            #train_accuracy, _ = ti.evaluate(train_data.iter(indices=sanity_set_size), int(arguments['--beam']))
+            train_accuracy_dict, _ = ti.evaluate(train_data.iter(indices=sanity_set_size), int(arguments['--beam']))
+            train_accuracy=train_accuracy_dict['Accuracy']
             print '\t...finished in {:.3f} sec'.format(time.time() - then)
 
             # get dev accuracy
             print 'evaluating on dev...'
             then = time.time()
             dy.renew_cg() # new graph for all the examples
-            dev_accuracy, _ = ti.evaluate(dev_data.iter(), int(arguments['--beam']))
+            #dev_accuracy, _ = ti.evaluate(dev_data.iter(), int(arguments['--beam']))
+            dev_accuracy_dict, dev_results = ti.evaluate(dev_data.iter(), int(arguments['--beam']))
+            dev_accuracy=dev_accuracy_dict['Accuracy']
             print '\t...finished in {:.3f} sec'.format(time.time() - then)
 
             if dev_accuracy > best_dev_accuracy:
@@ -842,9 +849,13 @@ if __name__ == "__main__":
                 train_progress_bar.finish()
                 break
 
-            print ('epoch: {0} train loss: {1:.4f} dev accuracy: {2:.4f} '
-                   'train accuracy: {3:.4f} best dev accuracy: {4:.4f} patience = {5}').format(epoch, avg_train_loss, dev_accuracy, train_accuracy, best_dev_accuracy, patience)
+            #print ('epoch: {0} train loss: {1:.4f} dev accuracy: {2:.4f} '
+            #'train accuracy: {3:.4f} best dev accuracy: {4:.4f} patience = {5}').format(epoch, avg_train_loss, dev_accuracy, train_accuracy, best_dev_accuracy, patience)
 
+            #log_to_file(log_file_name, epoch, avg_train_loss, train_accuracy, dev_accuracy)
+
+            print ('epoch: {0} train loss: {1:.4f} dev accuracy: {2:.4f} '
+                       'train accuracy: {3:.4f} best dev accuracy: {4:.4f} patience = {5}').format(epoch, avg_train_loss, dev_accuracy, train_accuracy, best_dev_accuracy, patience)
             log_to_file(log_file_name, epoch, avg_train_loss, train_accuracy, dev_accuracy)
 
             if patience == train_hyperparams['PATIENCE']:
@@ -859,9 +870,9 @@ if __name__ == "__main__":
         ti = SoftAttention(pc, model_hyperparams, best_model_path)
         dev_accuracy, dev_results = ti.evaluate(dev_data.iter(), int(arguments['--beam']))
         print 'Best dev accuracy: {}'.format(dev_accuracy)
-        write_param_file(output_file_path, dict(model_hyperparams.items()+train_hyperparams.items()))
+        #write_param_file(output_file_path, dict(model_hyperparams.items()+train_hyperparams.items()))
         write_pred_file(output_file_path, dev_results)
-        write_eval_file(output_file_path, best_dev_accuracy, dev_path)
+        write_eval_file(output_file_path, dev_accuracy, dev_path)
 
     elif arguments['test']:
         print '=========EVALUATION ONLY:========='
@@ -909,6 +920,7 @@ if __name__ == "__main__":
 
     elif arguments['ensemble_test']:
         print '=========EVALUATION ONLY:========='
+        print arguments
         # requires test path, model path of pretrained path and results path where to write the results to
         assert arguments['--test_path']!=None
         

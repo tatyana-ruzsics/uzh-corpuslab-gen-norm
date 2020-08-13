@@ -15,6 +15,7 @@ BEGIN_CHAR   = u'<s>'
 STOP_CHAR   = u'</s>'
 UNK_CHAR = u'<unk>'
 BOUNDARY_CHAR = u' '
+CAP_CHAR = u'√'
 
 ### IO handling and evaluation
 
@@ -40,8 +41,10 @@ def write_pred_file(output_file_path, final_results, format = 0):
     if format == 0:
         predictions_path = output_file_path + '.predictions'
         with codecs.open(predictions_path, 'w', encoding='utf8') as predictions:
-            for input, prediction in final_results:
-                predictions.write(u'{}\t{}\n'.format(input, prediction))
+            #for input, prediction in final_results:
+            for items in final_results:
+                predictions.write(u'{}\n'.format(u'\t'.join(items)))
+                #predictions.write(u'{}\t{}\n'.format(input, prediction))
     elif format == 1:
         id = 0
         predictions_path = output_file_path + '.predictions'
@@ -62,10 +65,12 @@ def write_param_file(output_file_path, hyper_params):
     
     return
 
-def write_eval_file(output_file_path, result, test_file_path, measure='Prediction Accuracy'):
+def write_eval_file(output_file_path, results, test_file_path):
     
     f = codecs.open(output_file_path + '.eval', 'w', encoding='utf8')
     f.write('File path = ' + str(test_file_path) + '\n')
-    f.write('{} = {}\n'.format(measure, result))
+    for measure, result in results.items():
+        f.write('{} = {}\n'.format(measure, result))
+    #f.write('{} = {}\n'.format(measure, result))
     
     return

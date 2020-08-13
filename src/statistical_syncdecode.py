@@ -264,7 +264,8 @@ def evaluate_syncbeam_nofeat(data, nmt_models, lm_models, weights, beam, format,
         else:
             final_results.append((input,predictions )) # input, (nmt_score, lm_score, pred, weighted_score)
     accuracy = correct / len(data)
-    return accuracy, final_results
+    accuracy_dict = {'Accuracy':accuracy}
+    return accuracy_dict, final_results
 
 def evaluate_syncbeam_feat(data, nmt_models, lm_models, weights, beam, format, verbose=False,exclude_eow=False):
     # data is a list of tuples (an instance of SoftDataSetFeat with iter method applied)
@@ -294,7 +295,8 @@ def evaluate_syncbeam_feat(data, nmt_models, lm_models, weights, beam, format, v
         else:
             final_results.append((input,predictions )) # input, (nmt_score, lm_score, pred, weighted_score)
     accuracy = correct / len(data)
-    return accuracy, final_results
+    accuracy_dict = {'Accuracy':accuracy}
+    return accuracy_dict, final_results
 
 def evaluate_syncbeam_context(data, nmt_models, lm_models, weights, beam, format, verbose=False,exclude_eow=False):
     # data is a list of tuples (an instance of SoftDataSetFeatExt with iter method applied)
@@ -337,7 +339,8 @@ def evaluate_syncbeam_context(data, nmt_models, lm_models, weights, beam, format
             else:
                 final_results.append((input,predictions )) # input, (nmt_score, lm_score, pred, weighted_score)
     accuracy = correct / data_len
-    return accuracy, final_results
+    accuracy_dict = {'Accuracy':accuracy}
+    return accuracy_dict, final_results
 
 if __name__ == "__main__":
     arguments = docopt(__doc__)
